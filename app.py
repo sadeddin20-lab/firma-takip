@@ -6,6 +6,16 @@ from datetime import datetime
 # Sayfa Ayarları
 st.set_page_config(page_title="ELÇİ OSGB - Firma Takip", layout="wide")
 
+# --- GÜVENLİ BAĞLANTI FONKSİYONU ---
+def get_gspread_client():
+    if "gcp_service_account" in st.secrets:
+        # Cloud ortamındaysak, secrets'taki dictionary'yi kullan
+        creds = dict(st.secrets["gcp_service_account"])
+        return gspread.service_account_from_dict(creds)
+    else:
+        # Bilgisayarındaysak (local) dosyayı kullan
+        return gspread.service_account(filename='credentials.json')
+
 def main():
     st.markdown("## 🏢 ELÇİ OSGB - FİRMA TAKİP SİSTEMİ")
     
@@ -28,8 +38,9 @@ def main():
                 st.error("Kullanıcı adı veya şifre hatalı!")
         return
 
+    # Bağlantıyı kur
     try:
-        gc = gspread.service_account(filename='credentials.json')
+        gc = get_gspread_client()
         sh = gc.open_by_key("1RCmzZcmeGzru3J-kSfqBL-TPPFJV6nnJTCWT69vxTrA").sheet1
         data = sh.get_all_values()
         df = pd.DataFrame(data[1:], columns=data[0])
@@ -37,6 +48,7 @@ def main():
         st.error(f"Veri bağlantısı hatası: {e}")
         return
 
+    # ... (Geri kalan kodun aynı şekilde kalacak reisim)
     if st.session_state.is_admin:
         with st.sidebar.expander("👑 Yönetici Paneli"):
             st.subheader("Yeni Firma Ekle")
@@ -72,18 +84,17 @@ def main():
             c1, c2, c3, c4 = st.columns([2, 1, 3, 1])
             c1.write(f"**{col_name}**")
             
-            # Ziyaret (24) ve İletişim (25) için radio butonları kaldırdık
             if i not in [24, 25]:
                 durum = c2.radio(f"D_{i}", ["✅", "❌"], index=0 if row.iloc[i] == "✅" else 1, key=f"d_{i}", label_visibility="collapsed")
             else:
-                c2.empty() # Radio butonlarını kaldırdık
+                c2.empty()
             
-            if i == 25: # Z Sütunu (İletişim)
+            if i == 25:
                 yeni_tel = c3.text_input("İletişim/Tel", value=row.iloc[i], key=f"t_{i}", label_visibility="collapsed")
                 if c4.button("Kaydet", key=f"btn_{i}"):
                     sh.update_cell(idx + 2, i + 1, yeni_tel)
                     st.success("İletişim güncellendi!")
-            elif i == 24: # Y Sütunu (Ziyaret Tarihleri)
+            elif i == 24:
                 yeni_tarih = c3.date_input("Ziyaret Tarihi", key=f"date_{i}")
                 if c4.button("Ekle", key=f"add_{i}"):
                     mevcut = str(row.iloc[i])
@@ -97,7 +108,6 @@ def main():
                     st.success("Güncellendi!")
 
         if st.button("⬅️ Listeye Dön"): del st.session_state.selected_firm_idx; st.rerun()
-            
     else:
         st.title("Firma Listesi")
         tehlike_sinifi = st.selectbox("Tehlike Sınıfı Seç:", df.iloc[:, 16].unique())
